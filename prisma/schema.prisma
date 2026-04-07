@@ -7,23 +7,70 @@ datasource db {
 }
 
 model Users {
-  id         String    @id @default(uuid()) @db.Uuid
-  fullname   String    @db.VarChar(100)
-  username   String    @db.VarChar(50)
-  slug       String    @db.VarChar(50)
-  email      String    @db.VarChar(50)
-  phone      String    @db.VarChar(20)
-  address    String?   @db.Text
-  dayOfBirth DateTime? @db.Date
-  point      Int       @default(0)
-  avatar     String?   @db.Text
-  isActive   Boolean   @default(true)
-  isDelete   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  tokens     Tokens[]
+  id              String           @id @default(uuid()) @db.Uuid
+  fullname        String           @db.VarChar(100)
+  username        String           @db.VarChar(50)
+  slug            String           @db.VarChar(50)
+  email           String           @db.VarChar(50)
+  phone           String           @db.VarChar(20)
+  address         String?          @db.Text
+  dayOfBirth      DateTime?        @db.Date
+  point           Int              @default(0)
+  avatar          String?          @db.Text
+  isActive        Boolean          @default(true)
+  isDelete        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  tokens          Tokens[]
+  createdTheaters Theaters[]       @relation("TheaterCreator")
+  updatedTheaters Theaters[]       @relation("TheaterUpdater")
+  tickets         Tickets[]
+  pointHistories  PointHistories[]
+  notifications   Notifications[]
+  reviews         Reviews[]
+  roles           Roles[]
 
   @@index([email])
+}
+
+model Roles {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @unique @db.VarChar(50) // Admin, Manager, Staff, Customer
+  description String?      @db.Text
+  
+  users       Users[]       // Quan hệ n-n với User
+  permissions Permissions[] // Quan hệ n-n với Permission
+  policies    Policies[]     // Các chính sách áp dụng cho Role này
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Permissions {
+  id          String   @id @default(uuid()) @db.Uuid
+  action      String   @db.VarChar(50) // Ví dụ: "create", "read", "update", "delete"
+  resource    String   @db.VarChar(50) // Ví dụ: "Ticket", "Movie", "Showtime"
+  description String?
+
+  roles       Roles[]   // Permission này thuộc những Role nào
+
+  @@unique([action, resource]) // Không trùng lặp quyền trên cùng 1 tài nguyên
+}
+
+model Policies {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(100)
+  effect      String   @default("ALLOW") // ALLOW hoặc DENY
+  
+  // Logic PBAC: Lưu điều kiện dưới dạng JSON
+  // Ví dụ: { "theaterId": "user.managedTheaterId" }
+  condition   Json?    
+  
+  roleId      String   @db.Uuid
+  role        Roles     @relation(fields: [roleId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Tokens {
@@ -37,4 +84,255 @@ model Tokens {
   user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Theaters {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  address   String   @db.Text
+  city      String   @db.VarChar(50)
+  room      Rooms[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+  creator   Users?   @relation("TheaterCreator", fields: [createdBy], references: [id])
+  updater   Users?   @relation("TheaterUpdater", fields: [updatedBy], references: [id])
+}
+
+enum ScreenType {
+  TWO_D // 2D
+  THREE_D // 3D
+  IMAX
+  GOLD_CLASS
+}
+
+model Rooms {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String      @db.VarChar(50)
+  totalSeats  Int // Tổng số ghế để check nhanh sức chứa
+  screenType  ScreenType  @default(TWO_D)
+  soundSystem String?     @db.VarChar(50) // Dolby Atmos, 7.1...
+  theaterId   String      @db.Uuid
+  theater     Theaters    @relation(fields: [theaterId], references: [id], onDelete: Cascade)
+  seats       Seats[]
+  showtimes   Showtimes[]
+}
+
+model Seats {
+  id      String    @id @default(uuid()) @db.Uuid
+  row     String    @db.VarChar(5) // Hàng A, B, C
+  number  Int // Số ghế 1, 2, 3
+  posX    Int? // Tọa độ X trên bản đồ (Frontend dùng)
+  posY    Int? // Tọa độ Y trên bản đồ (Frontend dùng)
+  type    SeatType  @default(NORMAL)
+  roomId  String    @db.Uuid
+  room    Rooms     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tickets Tickets[]
+
+  @@unique([roomId, row, number]) // Một vị trí chỉ có 1 ID ghế
+}
+
+enum SeatType {
+  NORMAL
+  VIP
+  COUPLE
+  SWEETBOX
+  ACCESSIBLE // Ghế cho người khuyết tật
+}
+
+model Showtimes {
+  id        String    @id @default(uuid()) @db.Uuid
+  startTime DateTime
+  endTime   DateTime
+  basePrice Decimal   @db.Decimal(10, 2) // Giá gốc của suất chiếu này
+  movieId   String    @db.Uuid // ID phim từ bảng Movie
+  roomId    String    @db.Uuid
+  room      Rooms     @relation(fields: [roomId], references: [id])
+  tickets   Tickets[]
+  movies    Movies?   @relation(fields: [moviesId], references: [id])
+  moviesId  String?   @db.Uuid
+
+  @@index([startTime])
+}
+
+model Movies {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(200)
+  slug        String   @unique
+  description String   @db.Text
+  director    String?
+  cast        String?
+  duration    Int // Thời lượng (phút)
+  releaseDate DateTime
+  trailerUrl  String?
+  posterUrl   String?
+  rating      String   @default("P") // P, T13, T16, T18
+
+  genres    Genres[] // Quan hệ n-n với Thể loại
+  showtimes Showtimes[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  reviews   Reviews[]
+}
+
+model Genres {
+  id     String   @id @default(uuid()) @db.Uuid
+  name   String   @unique
+  movies Movies[]
+}
+
+model Tickets {
+  id            String       @id @default(uuid()) @db.Uuid
+  showtimeId    String       @db.Uuid
+  seatId        String       @db.Uuid
+  userId        String       @db.Uuid
+  status        TicketStatus @default(HOLDING)
+  price         Decimal      @db.Decimal(10, 2) // Giá thực tế lúc mua (đã cộng surcharge VIP)
+  holdExpiresAt DateTime? // Thời gian hết hạn giữ chỗ
+  paymentId     String?      @unique // Mã giao dịch từ VNPay/Momo
+
+  showtime Showtimes @relation(fields: [showtimeId], references: [id])
+  seat     Seats     @relation(fields: [seatId], references: [id])
+  user     Users     @relation(fields: [userId], references: [id])
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  vouchers   Vouchers? @relation(fields: [vouchersId], references: [id])
+  vouchersId String?   @db.Uuid
+  payments   Payments?
+
+  @@unique([showtimeId, seatId]) // Chặn tuyệt đối việc 2 người cùng đặt 1 ghế/suất
+}
+
+enum TicketStatus {
+  HOLDING // Đang chọn, chờ thanh toán
+  BOOKED // Đã mua thành công
+  CANCELLED // Đã hủy
+  REFUNDED // Đã hoàn tiền
+}
+
+model Vouchers {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(20)
+  discount    Decimal  @db.Decimal(10, 2)
+  type        String   @default("FIXED") // FIXED hoặc PERCENT
+  minOrder    Decimal  @default(0)
+  maxDiscount Decimal?
+  startDate   DateTime
+  endDate     DateTime
+  usageLimit  Int      @default(1)
+  usedCount   Int      @default(0)
+
+  tickets Tickets[] // Vé nào đã áp dụng voucher này
+}
+
+model PointHistories {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      Users    @relation(fields: [userId], references: [id])
+  amount    Int // +100 hoặc -50
+  reason    String // "Tích điểm từ vé #123", "Đổi quà"
+  createdAt DateTime @default(now())
+}
+
+model Payments {
+  id       String  @id @default(uuid()) @db.Uuid
+  orderId  String  @unique @db.Uuid // Liên kết với đơn hàng hoặc vé
+  amount   Decimal @db.Decimal(12, 2) // Tổng tiền thanh toán
+  currency String  @default("VND") @db.VarChar(10)
+
+  // Thông tin cổng thanh toán
+  method        PaymentMethod @default(CASH)
+  status        PaymentStatus @default(PENDING)
+  gateway       String?       @db.VarChar(50) // vnpay, momo, stripe, zalopay
+  transactionId String?       @unique @db.VarChar(100) // Mã GD từ phía ngân hàng/cổng thanh toán
+
+  // Chi tiết phản hồi từ Gateway (Lưu dưới dạng JSON để đối soát khi lỗi)
+  rawResponse Json?
+
+  // Thời gian
+  paidAt    DateTime? // Thời điểm thanh toán thành công thực tế
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Audit fields (Theo dõi ai xử lý nếu thanh toán thủ công)
+  createdBy String? @db.Uuid
+  updatedBy String? @db.Uuid
+
+  // Quan hệ
+  ticket Tickets @relation(fields: [orderId], references: [id])
+  // user       Users         @relation(fields: [createdBy], references: [id]) (Nếu cần)
+
+  @@index([transactionId])
+  @@index([status])
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  VNPAY
+  MOMO
+  STRIPE
+  ZALOPAY
+}
+
+enum PaymentStatus {
+  PENDING // Chờ thanh toán
+  SUCCESS // Thành công
+  FAILED // Thất bại
+  REFUNDED // Đã hoàn tiền
+  EXPIRED // Hết hạn (User không quét mã QR kịp)
+}
+
+model Notifications {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      Users    @relation(fields: [userId], references: [id])
+  title     String
+  content   String   @db.Text
+  type      String // TICKET_SUCCESS, PROMOTION, SYSTEM
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Reviews {
+  id      String  @id @default(uuid()) @db.Uuid
+  userId  String  @db.Uuid
+  movieId String  @db.Uuid
+  rating  Int     @default(5) // 1-5 sao
+  comment String? @db.Text
+
+  user      Users    @relation(fields: [userId], references: [id])
+  movie     Movies   @relation(fields: [movieId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, movieId]) // Một người chỉ đánh giá 1 phim 1 lần
+}
+
+model FeatureFlags {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique @db.VarChar(50) // Ví dụ: "enable-momo-payment", "maintenance-mode"
+  description String? @db.Text // Mô tả tính năng này dùng làm gì
+  isEnabled   Boolean @default(false) // Trạng thái chính: Bật hay Tắt
+
+  // Cấu hình nâng cao (Optional)
+  value String?  @db.Text // Lưu cấu hình JSON nếu cần (ví dụ: % user được thử nghiệm)
+  type  FlagType @default(BOOLEAN) // Phân loại: BOOLEAN, JSON, NUMBER
+
+  // Audit fields (Như bạn đã yêu cầu ở bước trước)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?  @db.Uuid
+  updatedBy String?  @db.Uuid
+
+  @@index([key]) // Index để truy vấn cực nhanh khi App khởi động
+}
+
+enum FlagType {
+  BOOLEAN
+  NUMBER
+  STRING
+  JSON
 }
