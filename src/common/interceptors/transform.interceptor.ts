@@ -16,8 +16,8 @@ export class TransformInterceptor<T> implements NestInterceptor<T, any> {
       map((data) => ({
         success: true,
         statusCode,
-        message: data?.message || 'Thao tác thành công',
-        data: data?.results || data, // Xử lý nếu data trả về có chứa message riêng
+        message: data?.message || 'Operation completed successfully',
+        data: data?.results || data,
         timestamp: new Date().toISOString(),
       })),
     );
