@@ -4,6 +4,8 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import compression from 'compression';
 import envConfig from './configs/env.config';
+import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -15,6 +17,9 @@ async function bootstrap() {
 
   // 2. Nén dữ liệu gửi đi để tăng tốc độ load ứng dụng
   app.use(compression());
+  
+  app.useGlobalFilters(new AllExceptionsFilter()); // Thêm các filter toàn cục nếu cần (ví dụ: AllExceptionsFilter)
+  app.useGlobalInterceptors(new TransformInterceptor()); // Thêm các interceptor toàn cục nếu cần (ví dụ: TransformInterceptor)
 
   // 3. Cấu hình CORS (Cho phép Frontend truy cập)
   app.enableCors({
@@ -33,6 +38,7 @@ async function bootstrap() {
       transform: true, // Tự động chuyển kiểu dữ liệu (ví dụ: string sang number)
     }),
   );
+
 
   // 7. Lắng nghe cổng từ .env
   const port = config.port;
