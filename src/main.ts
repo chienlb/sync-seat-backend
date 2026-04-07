@@ -3,11 +3,13 @@ import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import compression from 'compression';
+import envConfig from './configs/env.config';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
+  const config = envConfig();
   // 1. Bảo mật với Helmet (Chống XSS, Clickjacking...)
   app.use(helmet());
 
@@ -21,7 +23,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix(config.apiPrefix);
 
   // 5. Cấu hình Validation toàn cục (Tự động kiểm tra dữ liệu đầu vào)
   app.useGlobalPipes(
@@ -33,10 +35,10 @@ async function bootstrap() {
   );
 
   // 7. Lắng nghe cổng từ .env
-  const port = process.env.PORT ?? 3000;
+  const port = config.port;
   await app.listen(port);
   
-  logger.log(`🚀 Application is running on: http://localhost:${port}/api/v1`);
+  logger.log(`🚀 Application is running on: http://localhost:${port}/${config.apiPrefix}`);
 }
 
 bootstrap();
